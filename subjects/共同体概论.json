@@ -389,35 +389,40 @@
             "type": "简答题",
             "content": "中华民族的基本概念和内涵是什么?",
             "options": [],
-            "answer": ""
+            "answer": "",
+            "aiGenerated": true
           },
           {
             "index": 21,
             "type": "简答题",
             "content": "中华民族共同体的理论渊源是什么?",
             "options": [],
-            "answer": ""
+            "answer": "",
+            "aiGenerated": true
           },
           {
             "index": 22,
             "type": "简答题",
             "content": "如何理解马克思主义民族理论的核心要义?",
             "options": [],
-            "answer": ""
+            "answer": "",
+            "aiGenerated": true
           },
           {
             "index": 23,
             "type": "简答题",
             "content": "** 如何理解中华文明的突出特性?",
             "options": [],
-            "answer": ""
+            "answer": "",
+            "aiGenerated": true
           },
           {
             "index": 24,
             "type": "简答题",
             "content": "如何推进中华民族共同体建设?",
             "options": [],
-            "answer": "章节测验\n已完成"
+            "answer": "章节测验\n已完成",
+            "aiGenerated": true
           }
         ]
       },

@@ -358,7 +358,7 @@ function getCurrentWrongBook() {
 }
 function renderAnswerWithWarning(q) {
   const ans = escapeHTML(q.answer || '(无)');
-  if (SUBJECTIVE_TYPES.includes(q.type) && q.answer) {
+  if (q.aiGenerated && q.answer) {
     return `<span style="color:var(--warn);">${AI_WARNING}</span><br>答案：${ans}`;
   }
   return '答案：' + ans;
@@ -448,6 +448,7 @@ async function loadQuestionBank(url) {
           const fq = {
             chapter: ch.chapter, section: sec.type || '', type: q.type,
             content: q.content || '', options: q.options || [], answer: q.answer || '', index: q.index || 0,
+            aiGenerated: q.aiGenerated || false,
           };
           flat.push(fq); chQs.push(fq);
         }
@@ -867,7 +868,7 @@ function renderExamReview() {
 
     if (isSubj) {
       html += `<div class="subj-answer"><label>你的答案：</label>${escapeHTML(userAns||'(未作答)')}</div>`;
-      if (q.answer) html += `<div class="answer-reveal"><label>${SUBJECTIVE_TYPES.includes(q.type) ? `<span style="color:var(--warn);">${AI_WARNING}</span><br>` : ''}参考答案：</label>${escapeHTML(q.answer)}</div>`;
+      if (q.answer) html += `<div class="answer-reveal"><label>${q.aiGenerated ? `<span style="color:var(--warn);">${AI_WARNING}</span><br>` : ''}参考答案：</label>${escapeHTML(q.answer)}</div>`;
     } else {
       // Render options with correct/wrong marking
       const correctAns = q.answer.trim();
