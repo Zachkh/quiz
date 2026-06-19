@@ -9,5 +9,16 @@
     "profession": "",
     "questionCount": 1550,
     "chapters": 16
+  },
+  {
+    "id": "大学语文",
+    "name": "大学语文各课测试题",
+    "shortName": "大学语文",
+    "file": "subjects/大学语文.json",
+    "author": "",
+    "university": "",
+    "profession": "",
+    "questionCount": 124,
+    "chapters": 9
   }
 ]
