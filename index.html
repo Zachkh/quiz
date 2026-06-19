@@ -278,7 +278,7 @@ const REPO_ISSUES_URL = 'https://github.com/Zachkh/quiz/issues/new';
 const DEFAULT_COUNTS = { '单选题': 30, '多选题': 10, '判断题': 10 };
 const DEFAULT_SCORES = { '单选题': 2, '多选题': 3, '判断题': 1 };
 const SUBJECTIVE_TYPES = ['简答题', '论述题', '填空题', '古文今译题'];
-const AI_WARNING = '⚠️ 题库未收录此题答案，以下内容由AI生成，仅供参考，请仔细甄别，建议对照《中华民族共同体概论》教材核实';
+const AI_WARNING = '（AI生成，仅供参考，请以教材为准）';
 const TIME_OPTIONS = [30, 45, 60, 90, 120];
 const STORAGE_KEY = 'quiz_app_data';
 
@@ -354,7 +354,7 @@ function getCurrentWrongBook() {
 function renderAnswerWithWarning(q) {
   const ans = escapeHTML(q.answer || '(无)');
   if (q.aiGenerated && q.answer) {
-    return `<span style="color:var(--warn);">${AI_WARNING}</span><br>答案：${ans}`;
+    return `答案：${ans} <span style="font-size:11px;color:var(--text3);">${AI_WARNING}</span>`;
   }
   return '答案：' + ans;
 }
@@ -863,7 +863,7 @@ function renderExamReview() {
 
     if (isSubj) {
       html += `<div class="subj-answer"><label>你的答案：</label>${escapeHTML(userAns||'(未作答)')}</div>`;
-      if (q.answer) html += `<div class="answer-reveal"><label>${q.aiGenerated ? `<span style="color:var(--warn);">${AI_WARNING}</span><br>` : ''}参考答案：</label>${escapeHTML(q.answer)}</div>`;
+      if (q.answer) html += `<div class="answer-reveal"><label>参考答案：</label>${escapeHTML(q.answer)}${q.aiGenerated ? ` <span style="font-size:11px;color:var(--text3);">${AI_WARNING}</span>` : ''}</div>`;
     } else {
       // Render options with correct/wrong marking
       const correctAns = q.answer.trim();
@@ -1072,7 +1072,7 @@ function enableTFClicksTest() {
 function renderTestAnswer(q, userAns, isSubj, multi) {
   if (isSubj) {
     let html = '';
-    if (q.answer) html += `<div class="answer-reveal"><label><span style="color:var(--warn);">${AI_WARNING}</span><br>参考答案：</label>${escapeHTML(q.answer)}</div>`;
+    if (q.answer) html += `<div class="answer-reveal"><label>参考答案：</label>${escapeHTML(q.answer)}${q.aiGenerated ? ` <span style="font-size:11px;color:var(--text3);">${AI_WARNING}</span>` : ''}</div>`;
     if (appState._testSubjAns) html += `<div class="subj-answer"><label>你的答案：</label>${escapeHTML(appState._testSubjAns)}</div>`;
     return html;
   }
