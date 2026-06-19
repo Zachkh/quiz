@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>中华民族共同体概论 · 题库练习</title>
+<title>题库练习系统</title>
 <style>
 :root {
   --bg: #fff; --surface: #f8f9fa; --border: #dee2e6;
@@ -169,11 +169,14 @@ footer a { color:var(--text2); }
 
 <header>
   <div class="header-inner">
-    <span class="logo">中华民族共同体概论</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="logo" id="pageTitle">题库练习</span>
+      <select id="subjectSelect" onchange="switchSubject(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--bg);color:var(--text2);cursor:pointer;display:none;"></select>
+    </div>
     <div class="mode-tabs">
       <button class="mode-tab" data-mode="exam" title="按比例抽题，限时考试">考试</button>
       <button class="mode-tab" data-mode="memorize" title="全部题目直接显示答案，用于背诵记忆">背题</button>
-      <button class="mode-tab" data-mode="test" title="全部题目按章节逐题练习，记录进度">测试</button>
+      <button class="mode-tab" data-mode="test" title="按章节逐题练习，记录进度">测试</button>
       <button class="mode-tab" data-mode="wrongbook" title="错题本">错题</button>
     </div>
   </div>
@@ -192,7 +195,7 @@ footer a { color:var(--text2); }
 // ============================================================
 // CONFIG
 // ============================================================
-const DATA_URL = '题库.json';
+const SUBJECTS_URL = 'subjects.json';
 const REPO_ISSUES_URL = 'https://github.com/Zackish/quiz/issues/new';
 const DEFAULT_COUNTS = { '单选题': 30, '多选题': 10, '判断题': 10 };
 const DEFAULT_SCORES = { '单选题': 2, '多选题': 3, '判断题': 1 };
@@ -203,9 +206,11 @@ const STORAGE_KEY = 'quiz_app_data';
 // ============================================================
 // STATE
 // ============================================================
-let questionBank = null;   // flattened: [{chapter, section, type, content, options, answer, index}]
-let chapters = [];         // [{name, questions:[]}]
+let questionBank = null;
+let chapters = [];
 let currentMode = 'exam';
+let subjects = [];         // available subjects from subjects.json
+let currentSubject = null; // currently selected subject
 let appState = {
   // exam
   examQuestions: [], examAnswers: {}, examTimeLeft: 0, examTotalTime: 0, examTimer: null, examSubmitted: false,
@@ -257,9 +262,47 @@ function toast(msg) {
 // ============================================================
 // DATA LOADING
 // ============================================================
-async function loadData() {
+async function loadSubjects() {
   try {
-    const resp = await fetch(DATA_URL);
+    const resp = await fetch(SUBJECTS_URL);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    subjects = await resp.json();
+    return subjects;
+  } catch (e) {
+    subjects = [];
+    return [];
+  }
+}
+
+function renderSubjectSelector() {
+  const sel = document.getElementById('subjectSelect');
+  if (subjects.length <= 1) { sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  sel.innerHTML = subjects.map(s => `<option value="${s.id}">${s.shortName||s.name}</option>`).join('');
+  const saved = localStorage.getItem('quiz_current_subject');
+  if (saved && subjects.find(s => s.id === saved)) {
+    currentSubject = subjects.find(s => s.id === saved);
+    sel.value = saved;
+  } else {
+    currentSubject = subjects[0];
+  }
+  document.getElementById('pageTitle').textContent = currentSubject.name;
+}
+
+async function switchSubject(subjectId) {
+  currentSubject = subjects.find(s => s.id === subjectId);
+  if (!currentSubject) return;
+  localStorage.setItem('quiz_current_subject', currentSubject.id);
+  document.getElementById('pageTitle').textContent = currentSubject.name;
+  document.title = currentSubject.name + ' · 题库练习';
+  questionBank = null; chapters = [];
+  await loadQuestionBank(currentSubject.file);
+  switchMode('exam');
+}
+
+async function loadQuestionBank(url) {
+  try {
+    const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const raw = await resp.json();
     const flat = [];
@@ -282,9 +325,20 @@ async function loadData() {
     switchMode('exam');
     return true;
   } catch (e) {
-    document.getElementById('main').innerHTML = `<div class="panel active"><div class="panel-head">加载失败</div><p>无法加载题库文件 <code>${DATA_URL}</code></p><p style="color:var(--text2);margin-top:8px;">请确保 <code>题库.json</code> 与此页面在同一目录下。</p><p style="margin-top:16px;">错误：${e.message}</p></div>`;
+    document.getElementById('main').innerHTML = `<div class="panel active"><div class="panel-head">加载失败</div><p>无法加载题库文件 <code>${url}</code></p><p style="color:var(--text2);margin-top:8px;">请确保题库 JSON 文件路径正确。</p><p style="margin-top:16px;">错误：${e.message}</p></div>`;
     return false;
   }
+}
+
+async function loadData() {
+  await loadSubjects();
+  if (subjects.length === 0) {
+    document.getElementById('main').innerHTML = `<div class="panel active"><div class="panel-head">加载失败</div><p>无法加载 <code>${SUBJECTS_URL}</code></p><p style="color:var(--text2);margin-top:8px;">请确保配置文件存在且格式正确。</p></div>`;
+    return false;
+  }
+  renderSubjectSelector();
+  document.title = currentSubject.name + ' · 题库练习';
+  await loadQuestionBank(currentSubject.file);
 }
 
 // ============================================================
