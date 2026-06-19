@@ -112,6 +112,8 @@ main { max-width: var(--max-w); margin:0 auto; padding:24px 20px; }
 .modal h2 { margin-bottom:8px; }
 .modal .score { font-size:56px; font-weight:800; margin:16px 0; }
 .modal .detail { font-size:14px; color:var(--text2); margin-bottom:20px; line-height:1.8; }
+.modal .contact-box { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px; margin:12px 0; text-align:left; font-size:14px; line-height:2; }
+.modal .contact-box .contact-label { font-size:12px; color:var(--text2); }
 
 /* Toast */
 .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); padding:10px 24px; border-radius:20px; background:var(--accent); color:#fff; font-size:14px; z-index:200; opacity:0; transition:opacity .3s; pointer-events:none; }
@@ -171,6 +173,7 @@ footer a { color:var(--text2); }
   <div class="header-inner">
     <div style="display:flex;align-items:center;gap:12px;">
       <span class="logo" id="pageTitle">题库练习</span>
+      <span id="subjectMeta" style="font-size:12px;color:var(--text3);display:none;"></span>
       <select id="subjectSelect" onchange="switchSubject(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--bg);color:var(--text2);cursor:pointer;display:none;"></select>
     </div>
     <div class="mode-tabs">
@@ -185,10 +188,32 @@ footer a { color:var(--text2); }
 <main id="main"></main>
 
 <div class="modal-overlay" id="scoreModal"><div class="modal"></div></div>
+<div class="modal-overlay" id="contributeModal">
+  <div class="modal" style="text-align:left;max-width:480px;">
+    <h2>贡献题库</h2>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">如果你有整理好的题库，欢迎贡献！审核通过后会被加入到系统中。请通过以下方式联系我：</p>
+    <div class="contact-box">
+      <div><span class="contact-label">邮箱：</span><a href="mailto:zs125656423@qq.com">zs125656423@qq.com</a></div>
+      <div><span class="contact-label">微信：</span>m228120520</div>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-top:8px;">提交时请附上：</p>
+    <ul style="font-size:13px;color:var(--text2);padding-left:20px;line-height:1.8;">
+      <li>题库 JSON 文件（格式参照 README）</li>
+      <li>学科/科目名称</li>
+      <li>所属大学（可选）</li>
+      <li>专业名称（可选）</li>
+    </ul>
+    <button class="btn" onclick="document.getElementById('contributeModal').classList.remove('show')" style="width:100%;margin-top:16px;">关闭</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <footer>
-  <p class="feedback-link">发现题目错误？<a href="#" id="feedbackBtn" target="_blank">提交反馈</a></p>
+  <p class="feedback-link">
+    <a href="#" id="contributeBtn">贡献题库</a>
+    <span style="margin:0 8px;color:var(--border);">|</span>
+    <a href="#" id="feedbackBtn" target="_blank">提交反馈</a>
+  </p>
 </footer>
 
 <script>
@@ -276,9 +301,8 @@ async function loadSubjects() {
 
 function renderSubjectSelector() {
   const sel = document.getElementById('subjectSelect');
-  if (subjects.length <= 1) { sel.style.display = 'none'; return; }
-  sel.style.display = '';
-  sel.innerHTML = subjects.map(s => `<option value="${s.id}">${s.shortName||s.name}</option>`).join('');
+  if (subjects.length <= 1) { sel.style.display = 'none'; }
+  else { sel.style.display = ''; sel.innerHTML = subjects.map(s => `<option value="${s.id}">${s.shortName||s.name}</option>`).join(''); }
   const saved = localStorage.getItem('quiz_current_subject');
   if (saved && subjects.find(s => s.id === saved)) {
     currentSubject = subjects.find(s => s.id === saved);
@@ -286,15 +310,27 @@ function renderSubjectSelector() {
   } else {
     currentSubject = subjects[0];
   }
-  document.getElementById('pageTitle').textContent = currentSubject.name;
+  updateSubjectDisplay();
+}
+
+function updateSubjectDisplay() {
+  const s = currentSubject;
+  document.getElementById('pageTitle').textContent = s.name;
+  document.title = s.name + ' · 题库练习';
+  const meta = document.getElementById('subjectMeta');
+  const parts = [];
+  if (s.university) parts.push(s.university);
+  if (s.profession) parts.push(s.profession);
+  if (s.author) parts.push('整理：' + s.author);
+  if (parts.length) { meta.textContent = parts.join(' · '); meta.style.display = ''; }
+  else { meta.style.display = 'none'; }
 }
 
 async function switchSubject(subjectId) {
   currentSubject = subjects.find(s => s.id === subjectId);
   if (!currentSubject) return;
   localStorage.setItem('quiz_current_subject', currentSubject.id);
-  document.getElementById('pageTitle').textContent = currentSubject.name;
-  document.title = currentSubject.name + ' · 题库练习';
+  updateSubjectDisplay();
   questionBank = null; chapters = [];
   await loadQuestionBank(currentSubject.file);
   switchMode('exam');
@@ -337,7 +373,6 @@ async function loadData() {
     return false;
   }
   renderSubjectSelector();
-  document.title = currentSubject.name + ' · 题库练习';
   await loadQuestionBank(currentSubject.file);
 }
 
@@ -1090,6 +1125,14 @@ function buildFeedbackURL(q) {
 document.getElementById('feedbackBtn').addEventListener('click', function(e) {
   e.preventDefault();
   window.open(REPO_ISSUES_URL + '?title=' + encodeURIComponent('[反馈]') + '&labels=反馈', '_blank');
+});
+
+document.getElementById('contributeBtn').addEventListener('click', function(e) {
+  e.preventDefault();
+  document.getElementById('contributeModal').classList.add('show');
+});
+document.getElementById('contributeModal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('show');
 });
 
 // ============================================================
