@@ -213,6 +213,8 @@ footer a { color:var(--text2); }
     <a href="#" id="contributeBtn">贡献题库</a>
     <span style="margin:0 8px;color:var(--border);">|</span>
     <a href="#" id="feedbackBtn" target="_blank">提交反馈</a>
+    <span style="margin:0 8px;color:var(--border);">|</span>
+    <a href="https://github.com/Zachkh/quiz/blob/main/CHANGELOG.md" target="_blank">更新日志</a>
   </p>
 </footer>
 
@@ -220,6 +222,7 @@ footer a { color:var(--text2); }
 // ============================================================
 // CONFIG
 // ============================================================
+const VERSION = '2.0.0';
 const SUBJECTS_URL = 'subjects.json';
 const REPO_ISSUES_URL = 'https://github.com/Zachkh/quiz/issues/new';
 const DEFAULT_COUNTS = { '单选题': 30, '多选题': 10, '判断题': 10 };
@@ -1142,6 +1145,17 @@ $$('.mode-tab').forEach(tab => {
 });
 
 loadData();
+
+// Update notification
+(function checkUpdate() {
+  const stored = localStorage.getItem('quiz_version');
+  if (stored !== VERSION) {
+    localStorage.setItem('quiz_version', VERSION);
+    if (stored) {
+      setTimeout(() => toast('已更新至 v' + VERSION + '！点击底部「更新日志」查看详情'), 500);
+    }
+  }
+})();
 </script>
 </body>
 </html>
