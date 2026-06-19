@@ -1,5 +1,23 @@
 # 更新日志
 
+## v2.1.0 (2026-06-20)
+
+### 安全加固
+- 所有题目内容、选项、答案渲染前进行 HTML 转义，防范 XSS 注入
+- 章节/题型名称在 onclick 中安全转义，防止 JS 注入
+- 添加 Content-Security-Policy meta 标签
+- 外部链接添加 `rel="noopener noreferrer"` 防止 tabnabbing
+
+### 稳定性修复
+- `saveLS()` 增加 localStorage 满时自动清理旧记录的容错机制
+- `loadQuestionBank()` 增加 JSON 结构防御性检查，字段缺失时跳过而非崩溃
+- `qid()`、`renderOptions()`、`startTestChapter()`、`enableTFClicks()` 增加空值保护
+- `renderMemorize()`、`renderTestOverview()` 增加 questionBank 空值守卫
+- 修复计时器倒数到 0 时短暂显示负数的显示异常
+- 错题本按当前学科自动过滤，切换学科后不再混淆
+
+---
+
 ## v2.0.1 (2026-06-20)
 
 ### 修复

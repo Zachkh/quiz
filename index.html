@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
 <title>题库练习系统</title>
 <style>
 :root {
@@ -215,7 +216,7 @@ footer a { color:var(--text2); }
       <div><span class="contact-label">微信：</span>m228120520</div>
     </div>
     <p style="font-size:13px;color:var(--text2);margin:12px 0;">或通过 GitHub Issues 提交（需登录 GitHub）：</p>
-    <a href="https://github.com/Zachkh/quiz/issues/new?title=反馈&labels=反馈" target="_blank" class="btn" style="display:block;text-align:center;width:100%;">前往 GitHub Issues</a>
+    <a href="https://github.com/Zachkh/quiz/issues/new?title=反馈&labels=反馈" target="_blank" rel="noopener noreferrer" class="btn" style="display:block;text-align:center;width:100%;">前往 GitHub Issues</a>
     <button class="btn" onclick="document.getElementById('feedbackModal').classList.remove('show')" style="width:100%;margin-top:8px;">关闭</button>
   </div>
 </div>
@@ -223,6 +224,13 @@ footer a { color:var(--text2); }
   <div class="modal" style="text-align:left;max-width:520px;max-height:80vh;overflow-y:auto;">
     <h2>更新日志</h2>
     <div style="font-size:14px;line-height:1.8;margin:12px 0;">
+      <h3 style="font-size:16px;margin:16px 0 8px;">v2.1.0 (2026-06-20)</h3>
+      <ul style="padding-left:20px;color:var(--text2);">
+        <li>安全加固：全部内容渲染前 HTML 转义 + CSP 策略 + onclick 安全转义</li>
+        <li>稳定性修复：localStorage 溢出自动清理、JSON 结构防御检查、6 处空值保护</li>
+        <li>错题本按学科自动隔离，切换学科不再混淆</li>
+        <li>修复计时器负数显示等体验问题</li>
+      </ul>
       <h3 style="font-size:16px;margin:16px 0 8px;">v2.0.1 (2026-06-20)</h3>
       <ul style="padding-left:20px;color:var(--text2);">
         <li>修复大学语文部分题目选项显示不全的问题</li>
@@ -262,7 +270,7 @@ footer a { color:var(--text2); }
 // ============================================================
 // CONFIG
 // ============================================================
-const VERSION = '2.0.1';
+const VERSION = '2.1.0';
 const SUBJECTS_URL = 'subjects.json';
 const REPO_ISSUES_URL = 'https://github.com/Zachkh/quiz/issues/new';
 const DEFAULT_COUNTS = { '单选题': 30, '多选题': 10, '判断题': 10 };
@@ -297,26 +305,56 @@ function $(sel, ctx) { return (ctx||document).querySelector(sel); }
 function $$(sel, ctx) { return Array.from((ctx||document).querySelectorAll(sel)); }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function shuffle(arr) { for (let i=arr.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
-function fmtTime(s) { const m=Math.floor(s/60), sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; }
+function fmtTime(s) { const m=Math.floor(Math.max(0,s)/60), sec=Math.abs(s)%60; return `${m}:${String(sec).padStart(2,'0')}`; }
+function escapeHTML(str) {
+  if (str == null) return '';
+  const d = document.createElement('span');
+  d.textContent = str;
+  return d.innerHTML;
+}
+function escapeAttr(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+}
+function escapeOnclick(str) {
+  return String(str).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/"/g,'&quot;');
+}
 
 // localStorage
 function loadLS() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
 }
 function saveLS(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {
+    // Quota exceeded — clear old exam history to make room
+    try {
+      const d = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+      if (d.examHistory && d.examHistory.length > 5) { d.examHistory = d.examHistory.slice(0,5); }
+      if (d.wrongBook) { const keys = Object.keys(d.wrongBook); if (keys.length > 200) { for (let i = 0; i < keys.length - 200; i++) delete d.wrongBook[keys[i]]; } }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    } catch(e2) { console.warn('localStorage write failed', e2); }
+  }
 }
 function getWrongBook() { const d=loadLS(); return d.wrongBook||{}; }
 function addWrong(qid, q) { const d=loadLS(); if(!d.wrongBook) d.wrongBook={}; d.wrongBook[qid]=q; saveLS(d); }
 function removeWrong(qid) { const d=loadLS(); if(d.wrongBook) { delete d.wrongBook[qid]; saveLS(d); } }
 function wrongCount() { return Object.keys(getWrongBook()).length; }
+function getCurrentWrongBook() {
+  const all = getWrongBook();
+  if (!currentSubject || !questionBank) return all;
+  const curChapters = new Set(questionBank.map(q => q.chapter));
+  const filtered = {};
+  for (const [k, v] of Object.entries(all)) {
+    if (curChapters.has(v.chapter)) filtered[k] = v;
+  }
+  return filtered;
+}
 function getTestProgress() { const d=loadLS(); return d.testProgress||{}; }
 function setTestProgress(chapter, idx) { const d=loadLS(); if(!d.testProgress) d.testProgress={}; d.testProgress[chapter]=idx; saveLS(d); }
 function getExamHistory() { const d=loadLS(); return d.examHistory||[]; }
 function addExamHistory(record) { const d=loadLS(); if(!d.examHistory) d.examHistory=[]; d.examHistory.unshift(record); if(d.examHistory.length>20) d.examHistory.pop(); saveLS(d); }
 
 // Unique question ID
-function qid(q) { return `${q.chapter}|${q.section}|${q.index}`; }
+function qid(q) { return q ? `${q.chapter||''}|${q.section||''}|${q.index||0}` : ''; }
 
 // Toast
 let toastTimer;
@@ -345,7 +383,7 @@ async function loadSubjects() {
 function renderSubjectSelector() {
   const sel = document.getElementById('subjectSelect');
   if (subjects.length <= 1) { sel.style.display = 'none'; }
-  else { sel.style.display = ''; sel.innerHTML = subjects.map(s => `<option value="${s.id}">${s.shortName||s.name}</option>`).join(''); }
+  else { sel.style.display = ''; sel.innerHTML = subjects.map(s => `<option value="${escapeAttr(s.id)}">${escapeHTML(s.shortName||s.name)}</option>`).join(''); }
   const saved = localStorage.getItem('quiz_current_subject');
   if (saved && subjects.find(s => s.id === saved)) {
     currentSubject = subjects.find(s => s.id === saved);
@@ -386,12 +424,15 @@ async function loadQuestionBank(url) {
     const flat = [];
     const chMap = [];
     for (const ch of raw) {
+      if (!ch || !ch.chapter) continue;
       const chQs = [];
-      for (const sec of ch.sections) {
+      for (const sec of (ch.sections || [])) {
+        if (!sec || !sec.questions) continue;
         for (const q of sec.questions) {
+          if (!q || !q.type) continue;
           const fq = {
-            chapter: ch.chapter, section: sec.type, type: q.type,
-            content: q.content, options: q.options, answer: q.answer, index: q.index,
+            chapter: ch.chapter, section: sec.type || '', type: q.type,
+            content: q.content || '', options: q.options || [], answer: q.answer || '', index: q.index || 0,
           };
           flat.push(fq); chQs.push(fq);
         }
@@ -620,12 +661,12 @@ function renderExamQuestion(idx) {
   m.innerHTML = `
     <div class="panel active">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-size:14px;color:var(--text2);">第 ${idx+1}/${total} 题 &middot; ${q.chapter} &middot; ${q.type} ${!isSubj?`(${(appState._examScores||{})[q.type]||0}分)`:'(不计分)'}</span>
+        <span style="font-size:14px;color:var(--text2);">第 ${idx+1}/${total} 题 &middot; ${escapeHTML(q.chapter)} &middot; ${escapeHTML(q.type)} ${!isSubj?`(${(appState._examScores||{})[q.type]||0}分)`:'(不计分)'}</span>
         <button class="btn btn-sm" onclick="submitExam()">交卷</button>
       </div>
       ${timerBar}
       <div class="q-block">
-        <div class="q-content">${q.content}</div>
+        <div class="q-content">${escapeHTML(q.content)}</div>
         ${isSubj ? `
           <textarea id="subjAnswer" rows="4" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px;font-size:14px;resize:vertical;" placeholder="输入你的答案（不计分）...">${currentAns||''}</textarea>
         ` : tf ? renderTFOptions(currentAns) : renderOptions(q, currentAns, multi)}
@@ -660,12 +701,13 @@ function renderExamQuestion(idx) {
 }
 
 function renderOptions(q, currentAns, multi) {
+  if (!q || !q.options) return '';
   return `<ul class="opt-list">${q.options.map(o => {
     const sel = multi ? (currentAns||[]).includes(o.label) : currentAns === o.label;
-    return `<li class="opt-item${sel?' selected':''}" data-label="${o.label}">
+    return `<li class="opt-item${sel?' selected':''}" data-label="${escapeAttr(o.label)}">
       <span class="${multi?'opt-check':'opt-radio'}${sel?' checked':''}"></span>
-      <span class="opt-label">${o.label}.</span>
-      <span class="opt-text">${o.text}</span>
+      <span class="opt-label">${escapeHTML(o.label)}.</span>
+      <span class="opt-text">${escapeHTML(o.text)}</span>
     </li>`;
   }).join('')}</ul>`;
 }
@@ -700,9 +742,9 @@ function enableOptionClicks(q, idx, multi) {
       const parent = block.parentElement;
       const scrollTop = window.scrollY;
       if (q.type === '判断题') {
-        block.innerHTML = `<div class="q-content">${q.content}</div>${renderTFOptions(appState.examAnswers[idx])}`;
+        block.innerHTML = `<div class="q-content">${escapeHTML(q.content)}</div>${renderTFOptions(appState.examAnswers[idx])}`;
       } else {
-        block.innerHTML = `<div class="q-content">${q.content}</div>${renderOptions(q, appState.examAnswers[idx], multi)}`;
+        block.innerHTML = `<div class="q-content">${escapeHTML(q.content)}</div>${renderOptions(q, appState.examAnswers[idx], multi)}`;
       }
       enableOptionClicks(q, idx, multi);
       window.scrollTo(0, scrollTop);
@@ -715,9 +757,11 @@ function enableTFClicks(idx) {
     item.addEventListener('click', () => {
       appState.examAnswers[idx] = item.dataset.label;
       const block = item.closest('.q-block');
+      if (!block) return;
       block.innerHTML = block.innerHTML.replace(/opt-radio checked/g, 'opt-radio').replace(/opt-item selected/g, 'opt-item');
       item.classList.add('selected');
-      item.querySelector('.opt-radio').classList.add('checked');
+      const radio = item.querySelector('.opt-radio');
+      if (radio) radio.classList.add('checked');
     });
   });
 }
@@ -802,12 +846,12 @@ function renderExamReview() {
     const q = d.q; const isSubj = SUBJECTIVE_TYPES.includes(q.type);
     const userAns = d.userAns;
     html += `<div class="q-block">
-      <div class="q-num">${q.chapter} &middot; ${q.type} ${isSubj?'(不计分)':''}</div>
-      <div class="q-content">${q.content}</div>`;
+      <div class="q-num">${escapeHTML(q.chapter)} &middot; ${escapeHTML(q.type)} ${isSubj?'(不计分)':''}</div>
+      <div class="q-content">${escapeHTML(q.content)}</div>`;
 
     if (isSubj) {
-      html += `<div class="subj-answer"><label>你的答案：</label>${userAns||'(未作答)'}</div>`;
-      if (q.answer) html += `<div class="answer-reveal"><label>参考答案：</label>${q.answer}</div>`;
+      html += `<div class="subj-answer"><label>你的答案：</label>${escapeHTML(userAns||'(未作答)')}</div>`;
+      if (q.answer) html += `<div class="answer-reveal"><label>参考答案：</label>${escapeHTML(q.answer)}</div>`;
     } else {
       // Render options with correct/wrong marking
       const correctAns = q.answer.trim();
@@ -820,16 +864,16 @@ function renderExamReview() {
         else if (userSet.has(o.label)) cls = ' wrong';
         return `<li class="opt-item${cls}">
           <span class="${q.type==='多选题'?'opt-check':'opt-radio'}${userSet.has(o.label)?' checked':''}"></span>
-          <span class="opt-label">${o.label}.</span>
-          <span class="opt-text">${o.text}</span>
+          <span class="opt-label">${escapeHTML(o.label)}.</span>
+          <span class="opt-text">${escapeHTML(o.text)}</span>
           ${correctSet.has(o.label)?'<span style="color:var(--ok);font-size:12px;">✓</span>':''}
         </li>`;
       }).join('')}</ul>`;
       const icon = d.isCorrect ? '✓' : '✗';
       const cls = d.isCorrect ? 'answer-reveal' : 'answer-reveal wrong-ans';
-      html += `<div class="${cls}"><label>${icon} 正确答案：${correctAns}</label></div>`;
+      html += `<div class="${cls}"><label>${icon} 正确答案：${escapeHTML(correctAns)}</label></div>`;
     }
-    html += `<div class="feedback-link"><a href="${buildFeedbackURL(q)}" target="_blank">反馈此题</a></div>`;
+    html += `<div class="feedback-link"><a href="${buildFeedbackURL(q)}" target="_blank" rel="noopener noreferrer">反馈此题</a></div>`;
     html += `</div>`;
   }
   html += `<button class="btn btn-primary" onclick="switchMode('exam')">返回</button></div>`;
@@ -840,6 +884,7 @@ function renderExamReview() {
 // MEMORIZE MODE
 // ============================================================
 function renderMemorize() {
+  if (!questionBank) return;
   const cf = appState.memoFilterChapter;
   const tf = appState.memoFilterType;
   const filtered = questionBank.filter(q => {
@@ -857,11 +902,11 @@ function renderMemorize() {
       <div class="panel-head">背题模式（共 ${filtered.length} 题）</div>
       <div class="filter-bar">
         <span class="filter-tag${!cf?' active':''}" onclick="appState.memoFilterChapter=null;renderMemorize();">全部章节</span>
-        ${chNames.map(c => `<span class="filter-tag${cf===c?' active':''}" onclick="appState.memoFilterChapter='${c}';renderMemorize();">${c}</span>`).join('')}
+        ${chNames.map(c => `<span class="filter-tag${cf===c?' active':''}" onclick="appState.memoFilterChapter='${escapeOnclick(c)}';renderMemorize();">${escapeHTML(c)}</span>`).join('')}
       </div>
       <div class="filter-bar">
         <span class="filter-tag${!tf?' active':''}" onclick="appState.memoFilterType=null;renderMemorize();">全部题型</span>
-        ${types.map(t => `<span class="filter-tag${tf===t?' active':''}" onclick="appState.memoFilterType='${t}';renderMemorize();">${t}</span>`).join('')}
+        ${types.map(t => `<span class="filter-tag${tf===t?' active':''}" onclick="appState.memoFilterType='${escapeOnclick(t)}';renderMemorize();">${escapeHTML(t)}</span>`).join('')}
       </div>
       <div id="memoList">${renderMemoList(filtered)}</div>
     </div>`;
@@ -871,10 +916,10 @@ function renderMemoList(questions) {
   if (!questions.length) return '<p style="color:var(--text2);">没有匹配的题目。</p>';
   return questions.map(q => `
     <div class="memo-card">
-      <div class="q-meta">${q.chapter} &middot; ${q.section} &middot; ${q.type}</div>
-      <div class="q-body">${q.content}</div>
-      ${q.options.length ? `<div style="margin:8px 0;font-size:14px;">${q.options.map(o => `<span style="margin-right:12px;">${o.label}. ${o.text}</span>`).join('')}</div>` : ''}
-      <div class="q-ans">答案：${q.answer||'(无)'}</div>
+      <div class="q-meta">${escapeHTML(q.chapter)} &middot; ${escapeHTML(q.section)} &middot; ${escapeHTML(q.type)}</div>
+      <div class="q-body">${escapeHTML(q.content)}</div>
+      ${q.options.length ? `<div style="margin:8px 0;font-size:14px;">${q.options.map(o => `<span style="margin-right:12px;">${escapeHTML(o.label)}. ${escapeHTML(o.text)}</span>`).join('')}</div>` : ''}
+      <div class="q-ans">答案：${escapeHTML(q.answer||'(无)')}</div>
     </div>`).join('');
 }
 
@@ -882,6 +927,7 @@ function renderMemoList(questions) {
 // TEST MODE
 // ============================================================
 function renderTestOverview() {
+  if (!questionBank) return;
   const progress = getTestProgress();
   const totalPerCh = {};
   for (const q of questionBank) { totalPerCh[q.chapter] = (totalPerCh[q.chapter]||0) + 1; }
@@ -899,7 +945,7 @@ function renderTestOverview() {
           return `
           <div class="ch-card">
             <div class="ch-card-header" onclick="this.parentElement.classList.toggle('open');">
-              <span>${ch.name} <span class="badge">${total}题</span></span>
+              <span>${escapeHTML(ch.name)} <span class="badge">${total}题</span></span>
               <span style="font-size:13px;color:var(--text2);">${pct}%</span>
             </div>
             <div class="ch-card-body">
@@ -909,7 +955,7 @@ function renderTestOverview() {
                 <button class="btn btn-sm" onclick="startTestChapter(${ci},null)">全部练习</button>
                 <button class="btn btn-sm" onclick="startTestChapter(${ci},'章节测验')">章节测验</button>
                 <button class="btn btn-sm" onclick="startTestChapter(${ci},'测试题')">测试题</button>
-                ${done>0?`<button class="btn btn-sm btn-err" onclick="resetTestProgress('${ch.name}')">重置进度</button>`:''}
+                ${done>0?`<button class="btn btn-sm btn-err" onclick="resetTestProgress('${escapeOnclick(ch.name)}')">重置进度</button>`:''}
               </div>
             </div>
           </div>`;
@@ -920,6 +966,7 @@ function renderTestOverview() {
 
 function startTestChapter(ci, sectionFilter) {
   const ch = chapters[ci];
+  if (!ch) return;
   let qs = sectionFilter ? ch.questions.filter(q => q.section === sectionFilter) : ch.questions;
   appState._testQuestions = qs;
   appState._testChapter = ci;
@@ -946,11 +993,11 @@ function renderTestQuestion(idx) {
   m.innerHTML = `
     <div class="panel active">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-size:14px;color:var(--text2);">第 ${idx+1}/${qs.length} 题 &middot; ${q.chapter} &middot; ${q.type}</span>
+        <span style="font-size:14px;color:var(--text2);">第 ${idx+1}/${qs.length} 题 &middot; ${escapeHTML(q.chapter)} &middot; ${escapeHTML(q.type)}</span>
         <button class="btn btn-sm" onclick="renderTestOverview()">返回列表</button>
       </div>
       <div class="q-block">
-        <div class="q-content">${q.content}</div>
+        <div class="q-content">${escapeHTML(q.content)}</div>
         <div id="testOptArea">
           ${isSubj ? `<textarea id="subjTest" rows="4" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:10px;font-size:14px;resize:vertical;" placeholder="输入你的答案...">${appState._testSubjAns||''}</textarea>`
           : tf ? renderTFOptions(userAns) : renderOptions(q, userAns, multi)}
@@ -985,10 +1032,12 @@ function enableOptionClicksTest(q, multi) {
         appState._testUserAns = label;
       }
       const area = document.getElementById('testOptArea');
-      if (q.type === '判断题') {
-        area.innerHTML = renderTFOptions(appState._testUserAns);
-      } else {
-        area.innerHTML = renderOptions(q, appState._testUserAns, multi);
+      if (area) {
+        if (q.type === '判断题') {
+          area.innerHTML = renderTFOptions(appState._testUserAns);
+        } else {
+          area.innerHTML = renderOptions(q, appState._testUserAns, multi);
+        }
       }
       enableOptionClicksTest(q, multi);
     });
@@ -1000,7 +1049,7 @@ function enableTFClicksTest() {
     item.addEventListener('click', () => {
       appState._testUserAns = item.dataset.label;
       const area = document.getElementById('testOptArea');
-      area.innerHTML = renderTFOptions(appState._testUserAns);
+      if (area) area.innerHTML = renderTFOptions(appState._testUserAns);
       enableTFClicksTest();
     });
   });
@@ -1009,8 +1058,8 @@ function enableTFClicksTest() {
 function renderTestAnswer(q, userAns, isSubj, multi) {
   if (isSubj) {
     let html = '';
-    if (q.answer) html += `<div class="answer-reveal"><label>参考答案：</label>${q.answer}</div>`;
-    if (appState._testSubjAns) html += `<div class="subj-answer"><label>你的答案：</label>${appState._testSubjAns}</div>`;
+    if (q.answer) html += `<div class="answer-reveal"><label>参考答案：</label>${escapeHTML(q.answer)}</div>`;
+    if (appState._testSubjAns) html += `<div class="subj-answer"><label>你的答案：</label>${escapeHTML(appState._testSubjAns)}</div>`;
     return html;
   }
   const correctAns = q.answer.trim();
@@ -1025,7 +1074,7 @@ function renderTestAnswer(q, userAns, isSubj, multi) {
     isCorrect = userAns === correctAns;
   }
   const cls = isCorrect ? 'answer-reveal' : 'answer-reveal wrong-ans';
-  return `<div class="${cls}"><label>${isCorrect?'✓ 正确':'✗ 错误'} 正确答案：${correctAns}</label></div>`;
+  return `<div class="${cls}"><label>${isCorrect?'✓ 正确':'✗ 错误'} 正确答案：${escapeHTML(correctAns)}</label></div>`;
 }
 
 function checkTestAnswer(idx) {
@@ -1075,7 +1124,7 @@ function resetTestProgress(chapterName) {
 // WRONG BOOK
 // ============================================================
 function renderWrongBook() {
-  const wb = getWrongBook();
+  const wb = getCurrentWrongBook();
   const wrongQs = Object.values(wb);
   const cf = appState.wrongFilterChapter;
   const tf = appState.wrongFilterType;
@@ -1096,11 +1145,11 @@ function renderWrongBook() {
       ${wrongQs.length === 0 ? '<p style="color:var(--text2);">还没有错题，去做些练习吧！</p>' : `
         <div class="filter-bar">
           <span class="filter-tag${!cf?' active':''}" onclick="appState.wrongFilterChapter=null;renderWrongBook();">全部章节</span>
-          ${chNames.map(c => `<span class="filter-tag${cf===c?' active':''}" onclick="appState.wrongFilterChapter='${c}';renderWrongBook();">${c}</span>`).join('')}
+          ${chNames.map(c => `<span class="filter-tag${cf===c?' active':''}" onclick="appState.wrongFilterChapter='${escapeOnclick(c)}';renderWrongBook();">${escapeHTML(c)}</span>`).join('')}
         </div>
         <div class="filter-bar">
           <span class="filter-tag${!tf?' active':''}" onclick="appState.wrongFilterType=null;renderWrongBook();">全部题型</span>
-          ${types.map(t => `<span class="filter-tag${tf===t?' active':''}" onclick="appState.wrongFilterType='${t}';renderWrongBook();">${t}</span>`).join('')}
+          ${types.map(t => `<span class="filter-tag${tf===t?' active':''}" onclick="appState.wrongFilterType='${escapeOnclick(t)}';renderWrongBook();">${escapeHTML(t)}</span>`).join('')}
         </div>
         <div class="nav-row">
           <button class="btn btn-primary" onclick="startWrongPractice()">练习错题</button>
@@ -1114,16 +1163,16 @@ function renderWrongBook() {
 function renderWrongList(questions) {
   return questions.map(q => `
     <div class="memo-card">
-      <div class="q-meta">${q.chapter} &middot; ${q.section} &middot; ${q.type}</div>
-      <div class="q-body">${q.content}</div>
-      ${q.options && q.options.length ? `<div style="margin:8px 0;font-size:14px;">${q.options.map(o => `<span style="margin-right:12px;">${o.label}. ${o.text}</span>`).join('')}</div>` : ''}
-      <div class="q-ans">答案：${q.answer||'(无)'}</div>
-      <button class="btn btn-sm btn-ok" onclick="removeWrong('${qid(q)}');renderWrongBook();" style="margin-top:8px;">移出错题本</button>
+      <div class="q-meta">${escapeHTML(q.chapter)} &middot; ${escapeHTML(q.section)} &middot; ${escapeHTML(q.type)}</div>
+      <div class="q-body">${escapeHTML(q.content)}</div>
+      ${q.options && q.options.length ? `<div style="margin:8px 0;font-size:14px;">${q.options.map(o => `<span style="margin-right:12px;">${escapeHTML(o.label)}. ${escapeHTML(o.text)}</span>`).join('')}</div>` : ''}
+      <div class="q-ans">答案：${escapeHTML(q.answer||'(无)')}</div>
+      <button class="btn btn-sm btn-ok" onclick="removeWrong('${escapeOnclick(qid(q))}');renderWrongBook();" style="margin-top:8px;">移出错题本</button>
     </div>`).join('');
 }
 
 function startWrongPractice() {
-  const wb = getWrongBook();
+  const wb = getCurrentWrongBook();
   const qs = Object.values(wb);
   if (!qs.length) { toast('没有错题可练习'); return; }
   // Filter by current filters
@@ -1159,7 +1208,7 @@ function clearWrongBook() {
 function buildFeedbackURL(q) {
   const title = encodeURIComponent(`[题目反馈] ${q.chapter} - ${q.type} #${q.index}`);
   const body = encodeURIComponent(
-    `### 题目信息\n- 章节：${q.chapter}\n- 分组：${q.section}\n- 题型：${q.type}\n- 题号：${q.index}\n\n### 题目内容\n${q.content}\n\n### 当前答案\n${q.answer||'(无)'}\n\n### 反馈内容\n（请描述问题...）`
+    `### 题目信息\n- 章节：${q.chapter}\n- 分组：${q.section}\n- 题型：${q.type}\n- 题号：${q.index}\n\n### 题目内容\n${escapeHTML(q.content)}\n\n### 当前答案\n${q.answer||'(无)'}\n\n### 反馈内容\n（请描述问题...）`
   );
   return `${REPO_ISSUES_URL}?title=${title}&body=${body}&labels=题目反馈`;
 }
