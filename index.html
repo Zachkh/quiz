@@ -256,6 +256,24 @@ footer a { color:var(--text2); }
     <button class="btn" onclick="document.getElementById('changelogModal').classList.remove('show')" style="width:100%;margin-top:16px;">关闭</button>
   </div>
 </div>
+<div class="modal-overlay" id="sponsorModal">
+  <div class="modal" style="text-align:center;max-width:440px;">
+    <h2>赞助</h2>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:18px;">如果这个项目帮助到了你，欢迎请我喝杯奶茶</p>
+    <div style="display:flex;gap:24px;justify-content:center;margin-bottom:12px;">
+      <div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">微信赞赏</div>
+        <img src="微信.jpg" style="width:150px;height:150px;border:1px solid var(--border);border-radius:8px;display:block;" alt="微信赞赏码">
+      </div>
+      <div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">支付宝</div>
+        <img src="支付宝.jpg" style="width:150px;height:150px;border:1px solid var(--border);border-radius:8px;display:block;" alt="支付宝收款码">
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin-top:8px;">转账时请备注昵称，我将列入页面鸣谢名单</p>
+    <button class="btn" onclick="document.getElementById('sponsorModal').classList.remove('show')" style="width:100%;margin-top:14px;">关闭</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <footer>
@@ -265,6 +283,8 @@ footer a { color:var(--text2); }
     <a href="#" id="feedbackBtn">提交反馈</a>
     <span style="margin:0 8px;color:var(--border);">|</span>
     <a href="#" id="changelogBtn">更新日志</a>
+    <span style="margin:0 8px;color:var(--border);">|</span>
+    <a href="#" id="sponsorBtn">赞助</a>
   </p>
 </footer>
 
@@ -1238,15 +1258,15 @@ function showModal(id) {
   document.getElementById(id).classList.add('show');
 }
 
-['contributeBtn','feedbackBtn','changelogBtn'].forEach((btnId, i) => {
-  const modalIds = ['contributeModal','feedbackModal','changelogModal'];
+['contributeBtn','feedbackBtn','changelogBtn','sponsorBtn'].forEach((btnId, i) => {
+  const modalIds = ['contributeModal','feedbackModal','changelogModal','sponsorModal'];
   document.getElementById(btnId).addEventListener('click', function(e) {
     e.preventDefault();
     showModal(modalIds[i]);
   });
 });
 
-['contributeModal','feedbackModal','changelogModal'].forEach(id => {
+['contributeModal','feedbackModal','changelogModal','sponsorModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('show');
   });
