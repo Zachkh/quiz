@@ -321,7 +321,6 @@ function updateSubjectDisplay() {
   const parts = [];
   if (s.university) parts.push(s.university);
   if (s.profession) parts.push(s.profession);
-  if (s.author) parts.push('整理：' + s.author);
   if (parts.length) { meta.textContent = parts.join(' · '); meta.style.display = ''; }
   else { meta.style.display = 'none'; }
 }
