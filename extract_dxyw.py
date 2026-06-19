@@ -130,32 +130,36 @@ def parse(paragraphs):
             buffer = []
             return
 
-        # Try to split inline options from the LAST content line
+        # Extract options from content lines
         opts = []
-        last = content_lines[-1]
-        inline = split_inline_opts(last)
-        if mode in ('single', 'multi') and len(inline) >= 2:
-            opts = inline
-            content_lines = content_lines[:-1]
-            if not content_lines:
-                content_lines = ['']
+        new_content_lines = []
+        for cl in content_lines:
+            # Try inline split (e.g. "A. xxx    B. yyy    C. zzz    D. www")
+            inline = split_inline_opts(cl)
+            if mode in ('single', 'multi') and len(inline) >= 2:
+                opts.extend(inline)
+                continue
+            # Single option line
+            m = re.match(r'^([A-F])[\.、．]\s*(.*)', cl)
+            if m and mode in ('single', 'multi'):
+                opts.append({'label': m.group(1), 'text': m.group(2).strip()})
+                continue
+            # Multi-line continuation of last option
+            if opts and mode in ('single', 'multi') and not re.match(r'^\d+[\.、]', cl):
+                opts[-1]['text'] += ' ' + cl.strip()
+                continue
+            new_content_lines.append(cl)
 
-        # If no inline options, check each line for option patterns
-        if not opts and mode in ('single', 'multi'):
-            for ci, cl in enumerate(content_lines):
-                m = re.match(r'^([A-F])[\.、．]\s*(.*)', cl)
-                if m:
-                    opts.append({'label': m.group(1), 'text': m.group(2)})
-                elif opts:
-                    opts[-1]['text'] += ' ' + cl
-            if opts:
-                content_lines = [l for l in content_lines if not re.match(r'^[A-F][\.、．]', l)]
-            if not content_lines:
-                content_lines = ['']
+        if opts:
+            content_lines = new_content_lines
+        if not content_lines:
+            content_lines = ['']
 
         content = ' '.join(content_lines).strip()
-        # Remove inline answer from content
-        content = re.sub(r'[（(]\s*[A-F]\s*[）)]\s*$', '', content).strip()
+        # Remove inline answer from content (e.g. "（  C   ）" or "( C )")
+        content = re.sub(r'[（(]\s*[A-F]\s*[）)]', '', content).strip()
+        # Clean up double spaces
+        content = re.sub(r'\s{2,}', ' ', content)
 
         # Clean answer
         answer = ans_text.strip()
